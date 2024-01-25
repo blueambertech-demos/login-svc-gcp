@@ -101,7 +101,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	validCreds, _, err := login.Validate(r.Context(), DbClient, form.Username, form.Password)
 	if err != nil {
-		httpError(w, "failed to validate", http.StatusInternalServerError, span, err)
+		httpError(w, "failed to validate", http.StatusForbidden, span, err)
 		return
 	}
 	if !validCreds {

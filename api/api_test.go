@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +20,7 @@ func TestMain(m *testing.M) {
 	logging.Setup(testContext, data.ServiceName)
 	defer logging.DeferredCleanup(testContext)
 	DbClient = mock.NewNoSQLClient()
-	Secrets = &mock.SecretManager{}
+	Secrets = mock.NewSecretManager()
 	Events = &mock.PubSubHandler{}
 	m.Run()
 }
@@ -35,6 +36,7 @@ func TestHealthHandler(t *testing.T) {
 }
 
 func TestAddLoginHandler(t *testing.T) {
+	DbClient.(*mock.NoSQLClient).ClearData()
 	body, err := getTestPostBody("test@test.com", "somepass")
 	if err != nil {
 		t.Error(err)
@@ -50,6 +52,7 @@ func TestAddLoginHandler(t *testing.T) {
 }
 
 func TestAddLoginHandlerWrongMethod(t *testing.T) {
+	DbClient.(*mock.NoSQLClient).ClearData()
 	body, err := getTestPostBody("test@test.com", "somepass")
 	if err != nil {
 		t.Error(err)
@@ -65,6 +68,7 @@ func TestAddLoginHandlerWrongMethod(t *testing.T) {
 }
 
 func TestAddLoginHandlerBadData(t *testing.T) {
+	DbClient.(*mock.NoSQLClient).ClearData()
 	body, err := getTestPostBody("", "")
 	if err != nil {
 		t.Error(err)
@@ -75,6 +79,82 @@ func TestAddLoginHandlerBadData(t *testing.T) {
 	addLoginHandler(w, req)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("Incorrect response code: %d", resp.StatusCode)
+	}
+}
+
+func TestLoginHandler(t *testing.T) {
+	DbClient.(*mock.NoSQLClient).ClearData()
+	body, err := getTestPostBody("test@test.com", "somepass")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	req := httptest.NewRequest("POST", "/login/add", bytes.NewReader(body)).WithContext(testContext)
+	w := httptest.NewRecorder()
+	addLoginHandler(w, req)
+
+	req = httptest.NewRequest("POST", "/login", bytes.NewReader(body)).WithContext(testContext)
+	w = httptest.NewRecorder()
+
+	loginHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Incorrect response code: %d", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(responseBody) == 0 {
+		t.Error("empty response")
+	}
+}
+
+func TestLoginHandlerBadData(t *testing.T) {
+	DbClient.(*mock.NoSQLClient).ClearData()
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader([]byte("bad data"))).WithContext(testContext)
+	w := httptest.NewRecorder()
+
+	loginHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("Incorrect response code: %d", resp.StatusCode)
+	}
+}
+
+func TestLoginHandlerWrongMethod(t *testing.T) {
+	DbClient.(*mock.NoSQLClient).ClearData()
+	body, err := getTestPostBody("test@test.com", "somepass")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	req := httptest.NewRequest("GET", "/login", bytes.NewReader(body)).WithContext(testContext)
+	w := httptest.NewRecorder()
+
+	loginHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("Incorrect response code: %d", resp.StatusCode)
+	}
+}
+
+func TestLoginHandlerUserNotFound(t *testing.T) {
+	DbClient.(*mock.NoSQLClient).ClearData()
+	body, err := getTestPostBody("test@test.com", "somepass")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(body)).WithContext(testContext)
+	w := httptest.NewRecorder()
+
+	loginHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("Incorrect response code: %d", resp.StatusCode)
 	}
 }
