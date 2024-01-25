@@ -1,0 +1,17 @@
+# Compiled files
+*.o
+*.a
+*.exe
+
+# Executables
+bin/
+
+# Output of 'go test -cover'
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE files
+.idea/
+.vscode/
